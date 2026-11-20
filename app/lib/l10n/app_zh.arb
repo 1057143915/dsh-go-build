@@ -14327,6 +14327,13 @@
       }
     }
   },
+  "tavernBackgroundWhole": "全图显示",
+  "tavernBackgroundWholeFooter": "整图等比放进屏幕、居中、不裁切；关掉就裁剪铺满",
+  "tavernBackgroundPoolDirectory": "随机背景文件夹",
+  "tavernBackgroundPoolChange": "随机换一张",
+  "tavernBackgroundPoolOnLaunch": "进入这一局时换",
+  "tavernBackgroundPoolOnChat": "切换局时换",
+  "tavernBackgroundPoolOnInterval": "定时换",
   "tavernPacks": "玩法包",
   "tavernPacksSubtitle": "装进来的玩法包；装上不等于启用，要在全局、角色或对话里加上才生效",
   "tavernPacksEmpty": "还没有玩法包",
@@ -16274,7 +16281,29 @@
   "wallpaperSampleAnswer": "适合。周六午后晴，风力 2 级，浪高不到半米，是这周最好的一天。",
   "wallpaperSampleNote": "傍晚降温明显，带一件薄外套。",
   "wallpaperSampleTool": "查了 3 个天气来源",
-  "searchKwWallpaper": "背景,背景图,聊天背景,自定义背景,换背景,模糊,壁纸图片",
+  "wallpaperPoolDirectory": "壁纸文件夹",
+  "wallpaperPoolNone": "还没选文件夹",
+  "wallpaperPoolChange": "换一张",
+  "wallpaperPoolOnLaunch": "每次启动时换",
+  "wallpaperPoolOnChat": "切换聊天框时换",
+  "wallpaperPoolOnInterval": "定时换",
+  "wallpaperPoolPeriod": "更换间隔（秒）",
+  "wallpaperPoolEvery": "每 {seconds} 秒",
+  "@wallpaperPoolEvery": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "wallpaperPoolEmpty": "这个文件夹里没有能用的图片",
+  "wallpaperRaw": "原样显示",
+  "wallpaperRawFooter": "整图居中、不裁切、不模糊、不压暗，也不加可读性白纱",
+  "wallpaperDirect": "直接用原图",
+  "wallpaperDirectFooter": "不拷贝，不限制大小和格式",
+  "wallpaperReadableTitle": "字看不清时",
+  "wallpaperReadableFooter": "把「模糊」往上拖一点，或拖「压暗」「提亮」；文字颜色会自动加深保证可读",
+  "searchKwWallpaper": "背景,背景图,聊天背景,自定义背景,换背景,模糊,壁纸图片,随机壁纸",
   "webTitle": "DSH 网页版",
   "webSshAppOnly": "经 SSH 隧道的地址只能在 App 内打开",
   "webRelayUnavailable": "经 DSH Remote 中转时打不开网页版，请在那台电脑上打开",

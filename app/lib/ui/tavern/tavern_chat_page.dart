@@ -19,11 +19,14 @@ import '../../speech/read_aloud.dart';
 import '../../speech/voice_cloud.dart';
 import '../speech/speech_ui.dart';
 import '../../state/connection_state.dart';
+import '../../state/notify_state.dart' show appForegroundProvider;
 import '../../state/settings_state.dart';
 import '../../state/voice_model_state.dart';
 import '../../state/voice_settings.dart';
+import '../../state/tavern_background_rotation.dart';
 import '../../state/voice_state.dart';
 import '../../tavern/tavern_backgrounds.dart';
+import '../../tavern/tavern_background_pool.dart';
 import '../../tavern/tavern_bookmarks.dart';
 import '../../tavern/tavern_live2d.dart';
 import '../../tavern/tavern_preview.dart';
@@ -126,6 +129,9 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
   /// The page the stage last played, played again when it (re)loads.
   TavernPage? _staged;
   late final Tavern _tavern = ref.read(tavernProvider);
+
+  /// 酒馆随机背景的表：dispose 时按它停，不再回头读 provider。
+  late final TavernBackgroundRotationOwner _backgroundRotation = ref.read(tavernBackgroundRotationProvider);
 
   /// Held from the start: the page stops what it read aloud as it closes,
   /// when it can no longer read providers.
@@ -315,6 +321,15 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
       onError: (Object _) {},
     );
     unawaited(_reload());
+    // 酒馆随机背景：这一局在，表才走（见 lib/state/tavern_background_rotation.dart）。
+    _backgroundRotation
+      ..watch(widget.chatId)
+      // 池子的设置是异步读回来的：到齐了补一次「进入这一局时换」。
+      ..sync(ref.read(tavernBackgroundPoolProvider).value)
+      ..setForeground(ref.read(appForegroundProvider));
+
+    ref.listenManual(tavernBackgroundPoolProvider, (_, next) => _backgroundRotation.sync(next.value));
+    ref.listenManual(appForegroundProvider, (_, foreground) => _backgroundRotation.setForeground(foreground));
     _groupWatch = _tavern
         .watchGroupChat(widget.chatId)
         .listen((group) => mounted ? setState(() => _group = group) : null, onError: (Object _) {});
@@ -347,6 +362,7 @@ class _TavernChatPageState extends ConsumerState<TavernChatPage> {
     final readAloud = _readAloud;
     scheduleMicrotask(() => readAloud.stopWhere((id) => id.startsWith('tavern:')));
     unawaited(_turn?.cancel());
+    _backgroundRotation.leave();
     _stream.dispose();
     _live.removeListener(_feedCanvas);
     _live.dispose();
