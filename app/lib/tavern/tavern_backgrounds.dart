@@ -70,6 +70,14 @@ class TavernChatBackground extends Notifier<CustomWallpaper?> {
     if (previous != null) await WallpaperImport.removeFile(previous.path);
   }
 
+  /// Takes [picture] as this chat's background (the random pool's pick, or a
+  /// look change on the one already here). Does not touch the previous file:
+  /// a pooled picture is either the tavern's own copy or the user's original.
+  Future<void> use(CustomWallpaper picture) => _store(picture);
+
+  /// 全图（contain，不裁切）还是裁剪铺满（cover）。
+  Future<void> setRaw(bool raw) => _refine((w) => w.copyWith(raw: raw));
+
   /// 模糊 / 提亮 / 压暗 for this chat's picture: the same three the app's own
   /// wallpaper has, on the picture itself, so a chat can be as soft as 酒馆设置
   /// wants it to be. Null when this chat has no picture.
