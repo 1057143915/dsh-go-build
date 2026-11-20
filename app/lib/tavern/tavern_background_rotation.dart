@@ -51,15 +51,27 @@ class TavernBackgroundRotator {
         remaining = remaining.where((path) => path != next).toList();
         final picture = pool.direct ? await _direct(next) : await _imported(next, current);
         if (picture == null) continue; // 认不出来 / 读不出来：换下一张再试
-        // 观感沿用池里那套：新图不是你调回默认，而是和上一张一样。
+        // 观感钉死：池里有值就用池里的；池里没有（还没在上面调过）就沿用这一局上一张的，
+        // 最后才回落到新图自己的默认值 —— 换图不该把你调好的模糊 / 提亮 / 压暗冲掉。
+        final pinnedBlur = pool.blur ?? current?.blur ?? picture.blur;
+        final pinnedLighten = pool.lighten ?? current?.lighten ?? picture.lighten;
+        final pinnedDim = pool.dim ?? current?.dim ?? picture.dim;
         await _ref.read(tavernChatBackgroundProvider(chatId).notifier).use(
           picture.copyWith(
             raw: pool.raw,
-            blur: pool.blur ?? picture.blur,
-            lighten: pool.lighten ?? picture.lighten,
-            dim: pool.dim ?? picture.dim,
+            blur: pinnedBlur,
+            lighten: pinnedLighten,
+            dim: pinnedDim,
           ),
         );
+        // 第一次换图时把这一套记进池：下一张、下一局都是这个观感，直到你改它。
+        if (pool.blur == null || pool.lighten == null || pool.dim == null) {
+          await _ref.read(tavernBackgroundPoolProvider.notifier).withLook(
+            blur: pinnedBlur,
+            lighten: pinnedLighten,
+            dim: pinnedDim,
+          );
+        }
         await _ref.read(tavernBackgroundPoolProvider.notifier).take(next);
         // 上一张如果是酒馆自己的副本（检查那条路拷进来的），换掉就删，别攒着占空间；
         // 用户自己的原图（不检查那条路）不动。

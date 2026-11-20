@@ -193,6 +193,10 @@ class TavernBackgroundPoolController extends AsyncNotifier<TavernBackgroundPool>
   /// 全图（true）还是裁剪铺满（false）。
   Future<void> setRaw(bool raw) => _update((pool) => pool.copyWith(raw: raw));
 
+  /// 一次把观感定下来（换图时把这一套钉进池，之后换图 / 换局都沿用）。
+  Future<void> withLook({double? blur, double? lighten, double? dim}) =>
+      _update((pool) => pool.withLook(blur: blur, lighten: lighten, dim: dim));
+
   Future<void> setDirect(bool direct) => _update((pool) => pool.copyWith(direct: direct));
 
   /// 记住刚挑中的那张，随机时避开它。

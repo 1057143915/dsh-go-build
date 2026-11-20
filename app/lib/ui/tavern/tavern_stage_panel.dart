@@ -346,7 +346,7 @@ class _Session extends ConsumerWidget {
                 title: l10n.tavernBackgroundWhole,
                 subtitle: l10n.tavernBackgroundWholeFooter,
                 value: scene.raw,
-                onChanged: (on) => unawaited(ref.read(tavernChatBackgroundProvider(chatId).notifier).setRaw(on)),
+                onChanged: (on) => unawaited(_setBackgroundRaw(ref, chatId, on)),
               ),
             // 模糊 / 提亮 / 压暗: the same three the app's own wallpaper has, on
             // this chat's picture. Dragging only moves the number here; the
@@ -357,18 +357,14 @@ class _Session extends ConsumerWidget {
                 key: const ValueKey('tavern-background-blur'),
                 title: l10n.wallpaperBlur,
                 value: scene.blur,
-                onDone: (v) => unawaited(
-                  ref.read(tavernChatBackgroundProvider(chatId).notifier).setBlur(v),
-                ),
+                onDone: (v) => unawaited(_setBackgroundBlur(ref, chatId, v)),
               ),
             if (scene != null)
               _BackgroundSlider(
                 key: const ValueKey('tavern-background-tone'),
                 title: Theme.of(context).brightness == Brightness.dark ? l10n.wallpaperDim : l10n.wallpaperLighten,
                 value: scene.toneFor(Theme.of(context).brightness),
-                onDone: (v) => unawaited(
-                  ref.read(tavernChatBackgroundProvider(chatId).notifier).setTone(Theme.of(context).brightness, v),
-                ),
+                onDone: (v) => unawaited(_setBackgroundTone(ref, chatId, Theme.of(context).brightness, v)),
               ),
             // ── 随机背景：这一局从文件夹里挑 ──
             SettingsTile(
@@ -503,6 +499,22 @@ class _Session extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// 在这里调的观感同时写进池：换下一张、换下一局都还是这个值，不会被新图的默认值冲掉。
+Future<void> _setBackgroundBlur(WidgetRef ref, String chatId, double blur) async {
+  await ref.read(tavernChatBackgroundProvider(chatId).notifier).setBlur(blur);
+  await ref.read(tavernBackgroundPoolProvider.notifier).setBlur(blur);
+}
+
+Future<void> _setBackgroundTone(WidgetRef ref, String chatId, Brightness brightness, double tone) async {
+  await ref.read(tavernChatBackgroundProvider(chatId).notifier).setTone(brightness, tone);
+  await ref.read(tavernBackgroundPoolProvider.notifier).setTone(brightness, tone);
+}
+
+Future<void> _setBackgroundRaw(WidgetRef ref, String chatId, bool raw) async {
+  await ref.read(tavernChatBackgroundProvider(chatId).notifier).setRaw(raw);
+  await ref.read(tavernBackgroundPoolProvider.notifier).setRaw(raw);
 }
 
 /// 随机背景的文件夹：系统/引擎那套目录选择器，选完立刻挑一张给这一局。
