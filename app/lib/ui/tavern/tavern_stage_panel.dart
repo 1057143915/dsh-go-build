@@ -13,8 +13,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
-import '../../tavern/tavern_background_pool.dart';
-import '../../tavern/tavern_background_rotation.dart';
 import '../../tavern/tavern_backgrounds.dart';
 import '../../tavern/tavern_bookmarks.dart';
 import '../../tavern/tavern_card_theme.dart';
@@ -28,9 +26,7 @@ import '../common/search_capsule.dart';
 import '../common/sheet_title_bar.dart';
 import '../features/feature_kit.dart' show QuietSpinner;
 import '../settings/settings_widgets.dart';
-import '../settings/appearance/wallpaper_section.dart'
-    show WallpaperSliderRow, WallpaperPoolPeriodSlider;
-import '../workspace/directory_picker.dart' show showDirectoryPicker;
+import '../settings/appearance/wallpaper_section.dart' show WallpaperSliderRow;
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
 import 'tavern_arrive.dart';
@@ -51,7 +47,6 @@ import 'tavern_runs_page.dart';
 import 'tavern_search_page.dart';
 import 'tavern_storybook_page.dart';
 import 'tavern_widgets.dart';
-import '../../wallpaper/wallpaper_pool.dart' show WallpaperPoolTrigger;
 
 enum TavernStageTab { session, state, director, turn }
 
@@ -211,7 +206,6 @@ class _Session extends ConsumerWidget {
     final own = ref.watch(tavernChatLayoutProvider(chatId));
     final layout = ref.read(tavernChatLayoutProvider(chatId).notifier);
     final scene = ref.watch(tavernChatBackgroundProvider(chatId));
-    final pool = ref.watch(tavernBackgroundPoolProvider).value ?? const TavernBackgroundPool();
     final persona = ref.watch(tavernPersonaSelectionProvider(chatId)).value?.persona;
     final preset = ref.watch(tavernPresetSelectionProvider(chatId)).value;
     final presets = ref.watch(tavernPresetsProvider).value ?? const <TavernPresetSummary>[];
@@ -337,17 +331,6 @@ class _Session extends ConsumerWidget {
                 chevron: false,
                 onTap: () => unawaited(ref.read(tavernChatBackgroundProvider(chatId).notifier).remove()),
               ),
-            // 全图 / 裁剪：跟着这一局这张图，随时改。
-            if (scene != null)
-              SettingsSwitchTile(
-                key: const ValueKey('tavern-background-raw'),
-                icon: AppIcons.addImage,
-                tinted: false,
-                title: l10n.tavernBackgroundWhole,
-                subtitle: l10n.tavernBackgroundWholeFooter,
-                value: scene.raw,
-                onChanged: (on) => unawaited(_setBackgroundRaw(ref, chatId, on)),
-              ),
             // 模糊 / 提亮 / 压暗: the same three the app's own wallpaper has, on
             // this chat's picture. Dragging only moves the number here; the
             // picture is baked once when the finger lets go (each bake is a
@@ -357,70 +340,19 @@ class _Session extends ConsumerWidget {
                 key: const ValueKey('tavern-background-blur'),
                 title: l10n.wallpaperBlur,
                 value: scene.blur,
-                onDone: (v) => unawaited(_setBackgroundBlur(ref, chatId, v)),
+                onDone: (v) => unawaited(
+                  ref.read(tavernChatBackgroundProvider(chatId).notifier).setBlur(v),
+                ),
               ),
             if (scene != null)
               _BackgroundSlider(
                 key: const ValueKey('tavern-background-tone'),
                 title: Theme.of(context).brightness == Brightness.dark ? l10n.wallpaperDim : l10n.wallpaperLighten,
                 value: scene.toneFor(Theme.of(context).brightness),
-                onDone: (v) => unawaited(_setBackgroundTone(ref, chatId, Theme.of(context).brightness, v)),
+                onDone: (v) => unawaited(
+                  ref.read(tavernChatBackgroundProvider(chatId).notifier).setTone(Theme.of(context).brightness, v),
+                ),
               ),
-            // ── 随机背景：这一局从文件夹里挑 ──
-            SettingsTile(
-              key: const ValueKey('tavern-background-pool-directory'),
-              icon: AppIcons.folder,
-              tinted: false,
-              title: l10n.tavernBackgroundPoolDirectory,
-              subtitle: pool.directory.isEmpty ? l10n.wallpaperPoolNone : pool.directory,
-              onTap: () => unawaited(_chooseBackgroundDirectory(context, ref, chatId)),
-            ),
-            SettingsTile(
-              key: const ValueKey('tavern-background-pool-change'),
-              icon: AppIcons.refresh,
-              tinted: false,
-              title: l10n.tavernBackgroundPoolChange,
-              onTap: () => unawaited(_changeBackgroundFromPool(context, ref, chatId)),
-            ),
-            SettingsSwitchTile(
-              key: const ValueKey('tavern-background-pool-launch'),
-              icon: AppIcons.play,
-              tinted: false,
-              title: l10n.tavernBackgroundPoolOnLaunch,
-              value: pool.has(WallpaperPoolTrigger.launch),
-              onChanged: (on) => unawaited(_toggleBackgroundPool(ref, WallpaperPoolTrigger.launch, on)),
-            ),
-            SettingsSwitchTile(
-              key: const ValueKey('tavern-background-pool-chat'),
-              icon: AppIcons.fork,
-              tinted: false,
-              title: l10n.tavernBackgroundPoolOnChat,
-              value: pool.has(WallpaperPoolTrigger.chat),
-              onChanged: (on) => unawaited(_toggleBackgroundPool(ref, WallpaperPoolTrigger.chat, on)),
-            ),
-            SettingsSwitchTile(
-              key: const ValueKey('tavern-background-pool-interval'),
-              icon: AppIcons.queued,
-              tinted: false,
-              title: l10n.tavernBackgroundPoolOnInterval,
-              value: pool.has(WallpaperPoolTrigger.interval),
-              onChanged: (on) => unawaited(_toggleBackgroundPool(ref, WallpaperPoolTrigger.interval, on)),
-            ),
-            WallpaperPoolPeriodSlider(
-              key: const ValueKey('tavern-background-pool-period'),
-              seconds: pool.seconds,
-              enabled: pool.has(WallpaperPoolTrigger.interval),
-              onChanged: (value) => unawaited(ref.read(tavernBackgroundPoolProvider.notifier).setSeconds(value)),
-            ),
-            SettingsSwitchTile(
-              key: const ValueKey('tavern-background-pool-direct'),
-              icon: AppIcons.folder,
-              tinted: false,
-              title: l10n.wallpaperDirect,
-              subtitle: l10n.wallpaperDirectFooter,
-              value: pool.direct,
-              onChanged: (on) => unawaited(ref.read(tavernBackgroundPoolProvider.notifier).setDirect(on)),
-            ),
           ],
         ),
         TavernAudioSection(chatId: chatId),
@@ -500,43 +432,6 @@ class _Session extends ConsumerWidget {
     );
   }
 }
-
-/// 在这里调的观感同时写进池：换下一张、换下一局都还是这个值，不会被新图的默认值冲掉。
-Future<void> _setBackgroundBlur(WidgetRef ref, String chatId, double blur) async {
-  await ref.read(tavernChatBackgroundProvider(chatId).notifier).setBlur(blur);
-  await ref.read(tavernBackgroundPoolProvider.notifier).setBlur(blur);
-}
-
-Future<void> _setBackgroundTone(WidgetRef ref, String chatId, Brightness brightness, double tone) async {
-  await ref.read(tavernChatBackgroundProvider(chatId).notifier).setTone(brightness, tone);
-  await ref.read(tavernBackgroundPoolProvider.notifier).setTone(brightness, tone);
-}
-
-Future<void> _setBackgroundRaw(WidgetRef ref, String chatId, bool raw) async {
-  await ref.read(tavernChatBackgroundProvider(chatId).notifier).setRaw(raw);
-  await ref.read(tavernBackgroundPoolProvider.notifier).setRaw(raw);
-}
-
-/// 随机背景的文件夹：系统/引擎那套目录选择器，选完立刻挑一张给这一局。
-Future<void> _chooseBackgroundDirectory(BuildContext context, WidgetRef ref, String chatId) async {
-  final title = context.l10n.tavernBackgroundPoolDirectory;
-  final directory = await showDirectoryPicker(context, title: title);
-  if (directory == null || directory.isEmpty) return;
-  await ref.read(tavernBackgroundPoolProvider.notifier).setDirectory(directory);
-  if (!context.mounted) return;
-  await _changeBackgroundFromPool(context, ref, chatId);
-}
-
-/// 「换一张」：每次都算，跳过 400 毫秒的合并。
-Future<void> _changeBackgroundFromPool(BuildContext context, WidgetRef ref, String chatId) async {
-  final l10n = context.l10n;
-  final messenger = ScaffoldMessenger.maybeOf(context);
-  final changed = await ref.read(tavernBackgroundRotatorProvider).rotate(chatId, force: true);
-  messenger?.showBriefNotice(changed ? l10n.wallpaperChanged : l10n.wallpaperPoolEmpty);
-}
-
-Future<void> _toggleBackgroundPool(WidgetRef ref, WallpaperPoolTrigger trigger, bool on) =>
-    ref.read(tavernBackgroundPoolProvider.notifier).toggle(trigger, on);
 
 /// One of the picture's three looks, held as it is dragged: the number moves
 /// with the finger, and only the value it lands on is kept (a bake per step

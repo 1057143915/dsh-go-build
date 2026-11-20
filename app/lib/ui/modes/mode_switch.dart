@@ -17,7 +17,6 @@ import '../common/app_sheet.dart';
 import '../common/sheet_title_bar.dart';
 import '../companion/companion_page.dart';
 import '../settings/settings_widgets.dart';
-import '../shell/page_frame.dart';
 import '../tavern/tavern_home_page.dart';
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
@@ -141,7 +140,7 @@ class ModeKey extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final AppMode shown = current ?? ref.watch(modeTabProvider);
+    final shown = current ?? ref.watch(modeTabProvider);
     return GlassIconButton(
       key: const ValueKey('mode-key'),
       icon: AppIcons.modes,
