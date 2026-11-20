@@ -93,6 +93,10 @@ class TavernBackgroundPool {
 
   TavernBackgroundPool withSeconds(int value) => copyWith(seconds: value.clamp(_minSeconds, _maxSeconds));
 
+  /// 一次性把三个观感记下来（换图时钉住用）。
+  TavernBackgroundPool withLook({double? blur, double? lighten, double? dim}) =>
+      copyWith(blur: blur, lighten: lighten, dim: dim);
+
   /// [brightness] 那一档的色调；没调过返回 null。
   double? toneFor(Brightness brightness) => brightness == Brightness.dark ? dim : lighten;
 
