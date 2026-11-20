@@ -13,9 +13,9 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../tavern/tavern_background_pool.dart';
+import '../tavern/tavern_background_rotation.dart';
 import '../wallpaper/wallpaper_pool.dart';
-import 'tavern_background_pool.dart';
-import 'tavern_background_rotation.dart';
 
 class TavernBackgroundRotationOwner {
   TavernBackgroundRotationOwner(this._ref);

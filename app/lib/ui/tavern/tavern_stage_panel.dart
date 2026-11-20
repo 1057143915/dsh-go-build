@@ -14,7 +14,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../tavern/tavern_background_pool.dart';
-import '../../wallpaper/wallpaper_pool.dart' show WallpaperPoolTrigger;
 import '../../tavern/tavern_background_rotation.dart';
 import '../../tavern/tavern_backgrounds.dart';
 import '../../tavern/tavern_bookmarks.dart';
@@ -52,6 +51,7 @@ import 'tavern_runs_page.dart';
 import 'tavern_search_page.dart';
 import 'tavern_storybook_page.dart';
 import 'tavern_widgets.dart';
+import '../../wallpaper/wallpaper_pool.dart' show WallpaperPoolTrigger;
 
 enum TavernStageTab { session, state, director, turn }
 
