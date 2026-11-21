@@ -114,7 +114,9 @@ jobs:
           chmod +x tooling/build-apk.sh
           NAME="${{ inputs.build_name }}"
           CODE="${{ inputs.version_code }}"
-          ARGS="--release -f arm64"
+          # 上游 1.3.0 起 release 默认要求带授权的鲸鱼伙伴包（~/keys/dsh-go/...）；
+          # 这台机器没有那份授权文件，所以显式 --no-companion（伙伴小屋仍可自己导入模型）。
+          ARGS="--release -f arm64 --no-companion"
           [ -n "$NAME" ] && ARGS="$ARGS --build-name $NAME"
           [ -n "$CODE" ] && ARGS="$ARGS -n $CODE"
           tooling/build-apk.sh $ARGS
