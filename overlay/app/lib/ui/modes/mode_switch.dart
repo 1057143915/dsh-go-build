@@ -1,9 +1,10 @@
 // Switching 模式 (lib/state/app_mode_state.dart): the 模式 sheet, its key in
 // the drawer, and opening the startup mode on launch.
 //
-// 工作 is the home. 伙伴 and 酒馆 are full pages pushed over it, one at a
-// time: switching pops back to the home first, so back from a mode always
-// lands in 工作.
+// 工作 is the home; 伙伴 and 酒馆 are two more tabs beside it at the foot of the
+// screen (lib/ui/modes/mode_tabs.dart), kept built once opened. The sheet and
+// the 切换模式 key therefore only choose a tab and close whatever page was over
+// the home — no page is pushed for a mode any more.
 
 import 'dart:async';
 
@@ -18,9 +19,9 @@ import '../companion/companion_page.dart';
 import '../settings/settings_widgets.dart';
 import '../shell/page_frame.dart';
 import '../tavern/tavern_home_page.dart';
-import '../fx/waves/distortion_wave.dart';
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
+import 'mode_tabs.dart';
 
 /// The page of a mode other than 工作.
 Widget appModePage(AppMode mode) => switch (mode) {
@@ -29,32 +30,13 @@ Widget appModePage(AppMode mode) => switch (mode) {
   AppMode.work => throw ArgumentError.value(mode, 'mode', '工作 is the home, not a page'),
 };
 
-const _modeRoutePrefix = 'mode:';
-
-/// Shows [mode]: back to the home, then that mode's page carried in over it on a
-/// soft wave of the theme's colour (Libraries.dev Distortion waves).
+/// Shows [mode]: any page or sheet over the home closes, then the tab at the
+/// foot of the screen switches to it (lib/ui/modes/mode_tabs.dart). The three
+/// modes stay built side by side, so this costs no page build and no WebView.
 void openAppMode(BuildContext context, AppMode mode) {
-  final navigator = Navigator.of(context);
-  final closing = navigator.canPop();
-  navigator.popUntil((route) => route.isFirst);
-  if (mode == AppMode.work) return;
-  // The wave pictures the page under it as it starts: let the sheet and any page leave first.
-  final settle = closing ? AppMotion.of(context, AppMotion.emphasized) : Duration.zero;
-  unawaited(
-    Future<void>.delayed(settle, () {
-      if (!navigator.mounted) return;
-      unawaited(
-        navigator.push(
-          DistortionWaveRoute<void>(
-            settings: RouteSettings(name: '$_modeRoutePrefix${mode.name}'),
-            // Quieter colour fringes than the author's 0.78: the words behind the front stay legible.
-            style: DistortionWaveStyle.vertical.copyWith(aberration: 0.35),
-            builder: (_) => appModePage(mode),
-          ),
-        ),
-      );
-    }),
-  );
+  final container = ProviderScope.containerOf(context, listen: false);
+  Navigator.of(context).popUntil((route) => route.isFirst);
+  container.read(modeTabProvider.notifier).show(mode);
 }
 
 String appModeLabel(L10n l10n, AppMode mode) => switch (mode) {
@@ -147,11 +129,13 @@ String appModeShortLabel(L10n l10n, AppMode mode) => switch (mode) {
   AppMode.tavern => l10n.tavernTitle,
 };
 
-/// The drawer's key to 模式, beside 网页模式.
-class ModeKey extends StatelessWidget {
-  const ModeKey({super.key, this.current = AppMode.work, this.size = 36, this.tier = GlassTier.pill});
+/// The drawer's key to 模式, beside 网页模式. The sheet it opens marks whichever
+/// tab is on screen, and still holds 启动时进入.
+class ModeKey extends ConsumerWidget {
+  const ModeKey({super.key, this.current, this.size = 36, this.tier = GlassTier.pill});
 
-  final AppMode current;
+  /// The tab to mark; null reads the one on screen.
+  final AppMode? current;
   final double size;
   final GlassTier tier;
 
@@ -201,29 +185,13 @@ class _ModeLaunchState extends ConsumerState<ModeLaunch> {
       WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(modeLaunchedProvider.notifier).mark());
       return widget.child;
     }
+    // 模式 › 启动: the tab is chosen before the first frame of the home, so a
+    // launch into 酒馆 shows no frame of 工作 first.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || ref.read(modeLaunchedProvider)) return;
-      unawaited(
-        Navigator.of(context).push(
-          _InstantRoute<void>(
-            settings: RouteSettings(name: '$_modeRoutePrefix${mode.startup.name}'),
-            builder: (_) => appModePage(mode.startup),
-          ),
-        ),
-      );
+      ref.read(modeTabProvider.notifier).show(mode.startup);
       ref.read(modeLaunchedProvider.notifier).mark();
     });
     return const AppBackdrop(child: SizedBox.expand());
   }
-}
-
-/// Appears at once (the launch), leaves like any page.
-class _InstantRoute<T> extends MaterialPageRoute<T> {
-  _InstantRoute({required super.builder, super.settings});
-
-  @override
-  Duration get transitionDuration => Duration.zero;
-
-  @override
-  Duration get reverseTransitionDuration => AppMotion.page;
 }
