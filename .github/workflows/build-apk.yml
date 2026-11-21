@@ -1,5 +1,9 @@
-# dsh-go 打包：源码就在仓库里（app/lib 已含改动），workflow 只负责装工具链、编运行时、打 release APK。
-# 触发：手动（workflow_dispatch）或推这个 workflow 文件本身。
+# dsh-go 出包：上游源码 + 本仓库的 overlay（只放我改过的文件）。
+#
+# 为什么不是把整棵树放进仓库：完整源码约 450MB，本机窄带上推不上去（56/TLS 反复断）。
+# 这里 checkout 上游（GitHub 内网，快），再把 overlay/ 覆盖上去，然后照原来的步骤编译。
+#
+# 触发：手动（workflow_dispatch）或推这个 workflow / overlay。
 
 name: build-apk
 
@@ -7,12 +11,17 @@ on:
   push:
     paths:
       - .github/workflows/build-apk.yml
+      - overlay/**
   workflow_dispatch:
     inputs:
-      build_name:
-        description: versionName（默认 1.0.15）
+      upstream_ref:
+        description: 上游 ref（默认 main）
         required: false
-        default: '1.0.15'
+        default: main
+      build_name:
+        description: versionName（留空 = 用 pubspec.yaml）
+        required: false
+        default: ''
       version_code:
         description: versionCode（留空 = 按构建分钟自动算）
         required: false
@@ -24,9 +33,33 @@ permissions:
 jobs:
   apk:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 150
     steps:
-      - uses: actions/checkout@v4
+      - name: 取本仓库（overlay）
+        uses: actions/checkout@v4
+        with:
+          path: overlay-src
+
+      - name: 取上游源码
+        uses: actions/checkout@v4
+        with:
+          repository: ccch1mneyyy/dsh-Go
+          ref: ${{ inputs.upstream_ref || 'main' }}
+          path: src
+
+      - name: 覆盖我的改动
+        run: |
+          cd overlay-src/overlay
+          # 只覆盖，不删：上游新增的文件保持原样。
+          find app -type f -name '*.dart' -o -type f -name '*.arb' | while read -r f; do
+            mkdir -p "../../src/$(dirname "$f")"
+            cp "$f" "../../src/$f"
+          done
+          cd ../../src
+          echo "--- changed files present:"
+          for f in $(cd ../overlay-src/overlay && find app -type f); do
+            test -f "$f" && echo "ok $f" || { echo "MISSING $f"; exit 1; }
+          done
 
       - uses: subosito/flutter-action@v2
         with:
@@ -38,6 +71,7 @@ jobs:
           java-version: '17'
 
       - name: 生成文案并下载依赖
+        working-directory: src
         run: |
           cd app
           python3 tool/l10n_merge.py
@@ -45,25 +79,27 @@ jobs:
 
       - name: 静态检查（不阻断）
         continue-on-error: true
-        run: cd app && flutter analyze
+        working-directory: src
+        run: cd app && flutter analyze lib
 
       - name: 缓存运行时
         uses: actions/cache@v5
         with:
-          path: runtime/.cache
-          key: runtime-dl-${{ hashFiles('runtime/build-runtime.sh', 'runtime/locks/**') }}
+          path: src/runtime/.cache
+          key: runtime-dl-${{ hashFiles('src/runtime/build-runtime.sh', 'src/runtime/locks/**') }}
           restore-keys: runtime-dl-
 
       - name: 第一步：构建 arm64 运行时
+        working-directory: src
         run: |
           chmod +x runtime/build-runtime.sh
           runtime/build-runtime.sh arm64-v8a
 
       - name: 校验运行时
+        working-directory: src
         run: python3 -I tooling/check_runtime_bundle.py arm64
 
-      # tawcroot 的 libtawcroot.so 在 release 构建里必须编出来（缺它 build-apk.sh 直接 die）；
-      # runner 自带的 ANDROID_NDK_HOME 指向旧版，装上钉死版本再改指过去。
+      # tawcroot 的 libtawcroot.so 在 release 构建里必须编出来（缺它 build-apk.sh 直接 die）。
       - name: 装 NDK 28.2.13676358（tawcroot 必需）
         run: |
           SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
@@ -73,15 +109,18 @@ jobs:
           test -f "$SDK/ndk/28.2.13676358/source.properties" && echo NDK_OK
 
       - name: 第二步：打 APK
+        working-directory: src
         run: |
           chmod +x tooling/build-apk.sh
           NAME="${{ inputs.build_name }}"
           CODE="${{ inputs.version_code }}"
-          ARGS="--release -f arm64 --build-name ${NAME:-1.0.15}"
-          if [ -n "$CODE" ]; then ARGS="$ARGS -n $CODE"; fi
+          ARGS="--release -f arm64"
+          [ -n "$NAME" ] && ARGS="$ARGS --build-name $NAME"
+          [ -n "$CODE" ] && ARGS="$ARGS -n $CODE"
           tooling/build-apk.sh $ARGS
 
       - name: 输出
+        working-directory: src
         run: |
           APK=$(ls app/build/app/outputs/flutter-apk/*arm64*release*.apk | head -1)
           echo "APK=$APK"
