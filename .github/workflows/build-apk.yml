@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       upstream_ref:
-        description: 上游 ref（默认 main）
+        description: 上游 ref（40 位 SHA、分支名或 tag；默认钉在 1.2.0 那次提交）
         required: false
         default: main
       build_name:
@@ -44,7 +44,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ccch1mneyyy/dsh-Go
-          ref: ${{ inputs.upstream_ref || 'main' }}
+          # 40 位完整 SHA：短回调会被 checkout 当成 refs/heads/<短哈希> 去 fetch，必然 404。
+          ref: ${{ inputs.upstream_ref || '0bfa417bc345dc36958775250a7dbcd4dfaeb01a' }}
           path: src
 
       - name: 覆盖我的改动
