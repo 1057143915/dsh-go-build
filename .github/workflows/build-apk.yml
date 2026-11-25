@@ -1,9 +1,10 @@
-# dsh-go 出包：上游源码 + 本仓库的 overlay（只放我改过的文件）。
+# dsh-go 出包：源码就在本仓库（app/lib 已含改动），workflow 只装工具链、编运行时、打 release APK。
 #
-# 为什么不是把整棵树放进仓库：完整源码约 450MB，本机窄带上推不上去（56/TLS 反复断）。
-# 这里 checkout 上游（GitHub 内网，快），再把 overlay/ 覆盖上去，然后照原来的步骤编译。
+# 不再 checkout 上游再覆盖 overlay：那条路要求 overlay 里每个文件都和上游那一个提交的 API 对齐，
+# 上游一升级（1.2.0 → 1.3.0 → 1.4.0）就整片编译不过，而且报的错全是"新上游调用了旧 API"，
+# 看不出真因。仓库里本来就是完整源码，直接用它编。
 #
-# 触发：手动（workflow_dispatch）或推这个 workflow / overlay。
+# 要跟上游升级时：把上游 tarball 解进来、重放改动、一次编过，再提交（见 SKILL 的"跟上游"一节）。
 
 name: build-apk
 
@@ -11,13 +12,11 @@ on:
   push:
     paths:
       - .github/workflows/build-apk.yml
-      - overlay/**
+      - 'app/lib/**'
+      - 'app/test/**'
+      - 'app/pubspec.yaml'
   workflow_dispatch:
     inputs:
-      upstream_ref:
-        description: 上游 ref（40 位 SHA、分支名或 tag；默认钉在 1.2.0 那次提交）
-        required: false
-        default: main
       build_name:
         description: versionName（留空 = 用 pubspec.yaml）
         required: false
@@ -35,32 +34,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     steps:
-      - name: 取本仓库（overlay）
-        uses: actions/checkout@v4
-        with:
-          path: overlay-src
-
-      - name: 取上游源码
-        uses: actions/checkout@v4
-        with:
-          repository: ccch1mneyyy/dsh-Go
-          # 40 位完整 SHA：短回调会被 checkout 当成 refs/heads/<短哈希> 去 fetch，必然 404。
-          ref: ${{ inputs.upstream_ref || '0bfa417bc345dc36958775250a7dbcd4dfaeb01a' }}
-          path: src
-
-      - name: 覆盖我的改动
-        run: |
-          cd overlay-src/overlay
-          # 只覆盖，不删：上游新增的文件保持原样。
-          find app -type f -name '*.dart' -o -type f -name '*.arb' | while read -r f; do
-            mkdir -p "../../src/$(dirname "$f")"
-            cp "$f" "../../src/$f"
-          done
-          cd ../../src
-          echo "--- changed files present:"
-          for f in $(cd ../overlay-src/overlay && find app -type f); do
-            test -f "$f" && echo "ok $f" || { echo "MISSING $f"; exit 1; }
-          done
+      - uses: actions/checkout@v4
 
       - uses: subosito/flutter-action@v2
         with:
@@ -72,7 +46,6 @@ jobs:
           java-version: '17'
 
       - name: 生成文案并下载依赖
-        working-directory: src
         run: |
           cd app
           python3 tool/l10n_merge.py
@@ -80,24 +53,21 @@ jobs:
 
       - name: 静态检查（不阻断）
         continue-on-error: true
-        working-directory: src
         run: cd app && flutter analyze lib
 
       - name: 缓存运行时
         uses: actions/cache@v5
         with:
-          path: src/runtime/.cache
-          key: runtime-dl-${{ hashFiles('src/runtime/build-runtime.sh', 'src/runtime/locks/**') }}
+          path: runtime/.cache
+          key: runtime-dl-${{ hashFiles('runtime/build-runtime.sh', 'runtime/locks/**') }}
           restore-keys: runtime-dl-
 
       - name: 第一步：构建 arm64 运行时
-        working-directory: src
         run: |
           chmod +x runtime/build-runtime.sh
           runtime/build-runtime.sh arm64-v8a
 
       - name: 校验运行时
-        working-directory: src
         run: python3 -I tooling/check_runtime_bundle.py arm64
 
       # tawcroot 的 libtawcroot.so 在 release 构建里必须编出来（缺它 build-apk.sh 直接 die）。
@@ -110,20 +80,18 @@ jobs:
           test -f "$SDK/ndk/28.2.13676358/source.properties" && echo NDK_OK
 
       - name: 第二步：打 APK
-        working-directory: src
         run: |
           chmod +x tooling/build-apk.sh
           NAME="${{ inputs.build_name }}"
           CODE="${{ inputs.version_code }}"
-          # 上游 1.3.0 起 release 默认要求带授权的鲸鱼伙伴包（~/keys/dsh-go/...）；
-          # 这台机器没有那份授权文件，所以显式 --no-companion（伙伴小屋仍可自己导入模型）。
+          # 1.3.0 起 release 默认要带授权的鲸鱼伙伴包（~/keys/dsh-go/...），这台机器没有那份授权，
+          # 显式 --no-companion（伙伴小屋仍可自己导入模型）。
           ARGS="--release -f arm64 --no-companion"
           [ -n "$NAME" ] && ARGS="$ARGS --build-name $NAME"
           [ -n "$CODE" ] && ARGS="$ARGS -n $CODE"
           tooling/build-apk.sh $ARGS
 
       - name: 输出
-        working-directory: src
         run: |
           APK=$(ls app/build/app/outputs/flutter-apk/*arm64*release*.apk | head -1)
           echo "APK=$APK"
