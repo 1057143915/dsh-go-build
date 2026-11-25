@@ -84,9 +84,9 @@ jobs:
           chmod +x tooling/build-apk.sh
           NAME="${{ inputs.build_name }}"
           CODE="${{ inputs.version_code }}"
-          # 1.3.0 起 release 默认要带授权的鲸鱼伙伴包（~/keys/dsh-go/...），这台机器没有那份授权，
-          # 显式 --no-companion（伙伴小屋仍可自己导入模型）。
-          ARGS="--release -f arm64 --no-companion"
+          # 这个仓库里的源码是 1.2.0 那版，build-apk.sh 还没有 --no-companion 选项
+          # （那是 1.3.0 起才加的），传了会直接 unknown option。
+          ARGS="--release -f arm64"
           [ -n "$NAME" ] && ARGS="$ARGS --build-name $NAME"
           [ -n "$CODE" ] && ARGS="$ARGS -n $CODE"
           tooling/build-apk.sh $ARGS
