@@ -11,6 +11,8 @@
 // the drawer's foot all stop clear of it without knowing it is there. The page
 // keeps the whole screen behind the bar, so its wallpaper is not squashed.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -67,6 +69,39 @@ class _ModeTabsState extends ConsumerState<ModeTabs> {
   /// WebView, no timers.
   final _built = <AppMode>{AppMode.work};
 
+  /// 沉浸: the bar slips away once the screen has been left alone for
+  /// [barIdle], and any touch brings it straight back. A look at the story (or
+  /// at her) is not interrupted by a strip that has nothing to say.
+  static const barIdle = Duration(seconds: 4);
+  Timer? _idle;
+  bool _sunk = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _arm();
+  }
+
+  @override
+  void dispose() {
+    _idle?.cancel();
+    super.dispose();
+  }
+
+  void _arm() {
+    _idle?.cancel();
+    _idle = Timer(barIdle, () {
+      if (mounted && !_sunk) setState(() => _sunk = true);
+    });
+  }
+
+  /// A touch, a tab change or the keyboard closing: the bar is here, and it
+  /// starts counting again.
+  void _wake() {
+    if (_sunk) setState(() => _sunk = false);
+    _arm();
+  }
+
   Widget _page(AppMode mode) => mode == AppMode.work ? widget.work : appModePage(mode);
 
   @override
@@ -83,7 +118,8 @@ class _ModeTabsState extends ConsumerState<ModeTabs> {
     // With the keyboard up the bar has nowhere to stand (it would sit on the
     // composer's hint), so it steps aside and the page owns the bottom edge the
     // way it did before there were tabs.
-    final showBar = media.viewInsets.bottom == 0;
+    final typing = media.viewInsets.bottom > 0;
+    final showBar = !typing && !_sunk;
     // The bar stands *under* the page, never over it: the page ends where the
     // bar begins, so the composer, the hint below it and any banner on the last
     // line are never covered.
@@ -95,6 +131,7 @@ class _ModeTabsState extends ConsumerState<ModeTabs> {
       padding: media.padding.copyWith(bottom: showBar ? 0 : media.padding.bottom),
     );
     void pick(AppMode mode) {
+      _wake();
       if (mode == tab) return;
       // The chat's box gives the keyboard back: the tab under it is not the one
       // being looked at.
@@ -108,7 +145,13 @@ class _ModeTabsState extends ConsumerState<ModeTabs> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && tab != AppMode.work) ref.read(modeTabProvider.notifier).home();
       },
-      child: Column(
+      // Any finger down anywhere — the story, the composer, a tab — brings the
+      // bar back and restarts the wait. translucent: the touch still reaches the
+      // page under it.
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => _wake(),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
@@ -132,8 +175,20 @@ class _ModeTabsState extends ConsumerState<ModeTabs> {
               ),
             ),
           ),
-          if (showBar) ModeTabBar(current: tab, onPick: pick),
+          // The bar slides out of the layout (not over the page): hidden, the
+          // page keeps the whole screen, gesture inset included.
+          ClipRect(
+            child: AnimatedSize(
+              duration: AppMotion.of(context, AppMotion.standard),
+              curve: AppMotion.std,
+              alignment: Alignment.topCenter,
+              child: showBar
+                  ? ModeTabBar(current: tab, onPick: pick)
+                  : const SizedBox(width: double.infinity),
+            ),
+          ),
         ],
+        ),
       ),
     );
   }
