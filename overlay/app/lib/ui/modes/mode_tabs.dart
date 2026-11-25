@@ -80,15 +80,19 @@ class _ModeTabsState extends ConsumerState<ModeTabs> {
       if (ref.read(modeTabProvider) != AppMode.work) ref.read(modeTabProvider.notifier).home();
     });
     final media = MediaQuery.of(context);
-    // One bar's height more of bottom inset for the page: its SafeAreas and the
-    // tab bar both count the system's own inset, so nothing pays for it twice.
-    // With the keyboard up the bar is behind it, so the page reserves nothing
-    // and the composer sits on the keyboard the way it did without tabs.
-    final keyboard = media.viewInsets.bottom;
+    // With the keyboard up the bar has nowhere to stand (it would sit on the
+    // composer's hint), so it steps aside and the page owns the bottom edge the
+    // way it did before there were tabs.
+    final showBar = media.viewInsets.bottom == 0;
+    // The bar stands *under* the page, never over it: the page ends where the
+    // bar begins, so the composer, the hint below it and any banner on the last
+    // line are never covered.
+    //
+    // While the bar is there it owns the gesture inset (its own SafeArea), so the
+    // page gets none of it and nothing pays twice. With the bar away, the page
+    // takes the inset back exactly as it would have without tabs.
     final framed = media.copyWith(
-      padding: media.padding.copyWith(
-        bottom: media.padding.bottom + (keyboard > 0 ? 0 : ModeTabs.barHeight),
-      ),
+      padding: media.padding.copyWith(bottom: showBar ? 0 : media.padding.bottom),
     );
     void pick(AppMode mode) {
       if (mode == tab) return;
@@ -104,29 +108,31 @@ class _ModeTabsState extends ConsumerState<ModeTabs> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && tab != AppMode.work) ref.read(modeTabProvider.notifier).home();
       },
-      child: Stack(
-        fit: StackFit.expand,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          MediaQuery(
-            data: framed,
-            // Kept, not rebuilt: a conversation, a scroll position and her room
-            // survive a look at another tab.
-            child: IndexedStack(
-              index: tab.index,
-              // Every page is a whole screen: loose constraints would let one
-              // size itself and the others follow the largest.
-              sizing: StackFit.expand,
-              children: [
-                for (final mode in AppMode.values)
-                  _built.contains(mode)
-                      // Off screen: her stage pauses itself (TickerMode), and
-                      // nothing off the tab animates.
-                      ? TickerMode(enabled: mode == tab, child: _page(mode))
-                      : const SizedBox.shrink(),
-              ],
+          Expanded(
+            child: MediaQuery(
+              data: framed,
+              // Kept, not rebuilt: a conversation, a scroll position and her room
+              // survive a look at another tab.
+              child: IndexedStack(
+                index: tab.index,
+                // Every page is a whole screen: loose constraints would let one
+                // size itself and the others follow the largest.
+                sizing: StackFit.expand,
+                children: [
+                  for (final mode in AppMode.values)
+                    _built.contains(mode)
+                        // Off screen: her stage pauses itself (TickerMode), and
+                        // nothing off the tab animates.
+                        ? TickerMode(enabled: mode == tab, child: _page(mode))
+                        : const SizedBox.shrink(),
+                ],
+              ),
             ),
           ),
-          Positioned(left: 0, right: 0, bottom: 0, child: ModeTabBar(current: tab, onPick: pick)),
+          if (showBar) ModeTabBar(current: tab, onPick: pick),
         ],
       ),
     );
@@ -144,27 +150,34 @@ class ModeTabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final scheme = Theme.of(context).colorScheme;
+    // Sunk, not stacked: a thin wash of the page's own colour with a hairline
+    // above it, so it reads as the foot of the page rather than a slab over it.
+    // Deliberately no BackdropFilter — a full-width blur would be sampled every
+    // frame while a conversation scrolls.
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: scheme.surface,
-        border: Border(top: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5), width: 0.5)),
+        color: scheme.surface.withValues(alpha: 0.94),
+        border: Border(top: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4), width: 0.5)),
       ),
       child: SafeArea(
         top: false,
         child: SizedBox(
           height: ModeTabs.barHeight,
-          child: Row(
-            children: [
-              for (final mode in AppMode.values)
-                Expanded(
-                  child: _ModeTabKey(
-                    mode: mode,
-                    label: appModeShortLabel(l10n, mode),
-                    selected: mode == current,
-                    onTap: () => onPick(mode),
+          child: Padding(
+            padding: const EdgeInsets.only(top: 5),
+            child: Row(
+              children: [
+                for (final mode in AppMode.values)
+                  Expanded(
+                    child: _ModeTabKey(
+                      mode: mode,
+                      label: appModeShortLabel(l10n, mode),
+                      selected: mode == current,
+                      onTap: () => onPick(mode),
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
