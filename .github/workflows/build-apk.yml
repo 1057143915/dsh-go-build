@@ -25,6 +25,11 @@ on:
 permissions:
   contents: read
 
+# 阿里云 Maven 镜像在 CI 上频繁 502（settings.gradle.kts / build.gradle.kts 里
+# DSH_MAVEN_MIRRORS != "0" 时才走镜像）；关掉它，直接用 google() / mavenCentral() / jitpack。
+env:
+  DSH_MAVEN_MIRRORS: '0'
+
 jobs:
   apk:
     runs-on: ubuntu-24.04
