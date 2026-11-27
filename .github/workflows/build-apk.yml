@@ -1,10 +1,9 @@
-# dsh-go 出包：源码就在本仓库（app/lib 已含改动），workflow 只装工具链、编运行时、打 release APK。
+# dsh-go 出包（1.4.1 分支版）：直接 checkout 我们的 fork，编它当前 main。
 #
-# 不再 checkout 上游再覆盖 overlay：那条路要求 overlay 里每个文件都和上游那一个提交的 API 对齐，
-# 上游一升级（1.2.0 → 1.3.0 → 1.4.0）就整片编译不过，而且报的错全是"新上游调用了旧 API"，
-# 看不出真因。仓库里本来就是完整源码，直接用它编。
+# 为什么编 fork 而不是编这里：fork 的 Actions 被 GitHub 禁用了，编译只能放在独立仓库。
+# fork 的 main = 上游 1.4.1 + 我们的改动；上游更新时在 fork 页面点一次 "Sync fork"。
 #
-# 要跟上游升级时：把上游 tarball 解进来、重放改动、一次编过，再提交（见 SKILL 的"跟上游"一节）。
+# 触发：手动（workflow_dispatch）或推这个 workflow。
 
 name: build-apk
 
@@ -12,17 +11,14 @@ on:
   push:
     paths:
       - .github/workflows/build-apk.yml
-      - 'app/lib/**'
-      - 'app/test/**'
-      - 'app/pubspec.yaml'
   workflow_dispatch:
     inputs:
+      ref:
+        description: fork 的分支或提交（默认 main）
+        required: false
+        default: main
       build_name:
         description: versionName（留空 = 用 pubspec.yaml）
-        required: false
-        default: ''
-      version_code:
-        description: versionCode（留空 = 按构建分钟自动算）
         required: false
         default: ''
 
@@ -34,7 +30,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     steps:
-      - uses: actions/checkout@v4
+      - name: 取源码（我们的 fork：上游 + 改动）
+        uses: actions/checkout@v4
+        with:
+          repository: 1057143915/dsh-Go
+          ref: ${{ inputs.ref || 'main' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: src
 
       - uses: subosito/flutter-action@v2
         with:
@@ -46,31 +48,36 @@ jobs:
           java-version: '17'
 
       - name: 生成文案并下载依赖
+        working-directory: src
         run: |
           cd app
           python3 tool/l10n_merge.py
           flutter pub get
 
       - name: 静态检查（不阻断）
+        working-directory: src
         continue-on-error: true
         run: cd app && flutter analyze lib
 
       - name: 缓存运行时
         uses: actions/cache@v5
         with:
-          path: runtime/.cache
-          key: runtime-dl-${{ hashFiles('runtime/build-runtime.sh', 'runtime/locks/**') }}
+          path: src/runtime/.cache
+          key: runtime-dl-${{ hashFiles('src/runtime/build-runtime.sh', 'src/runtime/locks/**') }}
           restore-keys: runtime-dl-
 
       - name: 第一步：构建 arm64 运行时
+        working-directory: src
         run: |
           chmod +x runtime/build-runtime.sh
           runtime/build-runtime.sh arm64-v8a
 
       - name: 校验运行时
+        working-directory: src
         run: python3 -I tooling/check_runtime_bundle.py arm64
 
-      # tawcroot 的 libtawcroot.so 在 release 构建里必须编出来（缺它 build-apk.sh 直接 die）。
+      # tawcroot 的 libtawcroot.so 在 release 构建里必须编出来；runner 自带的
+      # ANDROID_NDK_HOME 指向旧版，装上钉死版本再改指过去。
       - name: 装 NDK 28.2.13676358（tawcroot 必需）
         run: |
           SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
@@ -80,18 +87,18 @@ jobs:
           test -f "$SDK/ndk/28.2.13676358/source.properties" && echo NDK_OK
 
       - name: 第二步：打 APK
+        working-directory: src
         run: |
           chmod +x tooling/build-apk.sh
           NAME="${{ inputs.build_name }}"
-          CODE="${{ inputs.version_code }}"
-          # 这个仓库里的源码是 1.2.0 那版，build-apk.sh 还没有 --no-companion 选项
-          # （那是 1.3.0 起才加的），传了会直接 unknown option。
-          ARGS="--release -f arm64"
-          [ -n "$NAME" ] && ARGS="$ARGS --build-name $NAME"
-          [ -n "$CODE" ] && ARGS="$ARGS -n $CODE"
-          tooling/build-apk.sh $ARGS
+          if [ -n "$NAME" ]; then
+            tooling/build-apk.sh --release -f arm64 --build-name "$NAME"
+          else
+            tooling/build-apk.sh --release -f arm64
+          fi
 
       - name: 输出
+        working-directory: src
         run: |
           APK=$(ls app/build/app/outputs/flutter-apk/*arm64*release*.apk | head -1)
           echo "APK=$APK"
