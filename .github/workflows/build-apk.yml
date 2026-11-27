@@ -91,10 +91,12 @@ jobs:
         run: |
           chmod +x tooling/build-apk.sh
           NAME="${{ inputs.build_name }}"
+          # --no-companion: 伙伴素材包在 CI 上不存在（本机 keys/ 里才有），1.4.1 的
+          # build-apk.sh 缺它会直接 die。
           if [ -n "$NAME" ]; then
-            tooling/build-apk.sh --release -f arm64 --build-name "$NAME"
+            tooling/build-apk.sh --release -f arm64 --no-companion --build-name "$NAME"
           else
-            tooling/build-apk.sh --release -f arm64
+            tooling/build-apk.sh --release -f arm64 --no-companion
           fi
 
       - name: 输出
